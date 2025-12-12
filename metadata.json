@@ -1,0 +1,8 @@
+{
+  "name": "SocraticSight",
+  "description": "A smart study companion that helps students solve math and physics problems using the Socratic method.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
