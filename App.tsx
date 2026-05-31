@@ -9,6 +9,8 @@ import { db } from './services/db';
 import { Message, Attachment, Session, Project } from './types';
 import { Send, EyeOff, Loader2, Sparkles, Paperclip, Link2, X, FileText, Mic, Square, Music } from 'lucide-react';
 
+const generateId = () => `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+
 const App: React.FC = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -19,6 +21,29 @@ const App: React.FC = () => {
   const [showRevealOption, setShowRevealOption] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+
+  const triggerConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      onConfirm: () => {
+        onConfirm();
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
   
   // Attachments in the chat input
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
@@ -108,7 +133,7 @@ const App: React.FC = () => {
 
   const createNewSession = () => {
     const newSession: Session = {
-      id: Date.now().toString(),
+      id: generateId(),
       title: 'New Problem',
       timestamp: Date.now(),
       messages: []
@@ -135,14 +160,18 @@ const App: React.FC = () => {
 
   const handleDeleteSession = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm("Delete this chat?")) {
-      setSessions(prev => prev.filter(s => s.id !== id));
-      if (currentSessionId === id) {
-        setCurrentSessionId(null);
-        setMessages([]);
+    triggerConfirm(
+      "Delete Chat",
+      "Are you sure you want to delete this chat session? This action cannot be undone.",
+      () => {
+        setSessions(prev => prev.filter(s => s.id !== id));
+        if (currentSessionId === id) {
+          setCurrentSessionId(null);
+          setMessages([]);
+        }
+        db.deleteSession(id);
       }
-      db.deleteSession(id);
-    }
+    );
   };
 
   const handleRenameSession = (id: string, newTitle: string) => {
@@ -167,7 +196,7 @@ const App: React.FC = () => {
 
   const handleCreateProject = (name: string) => {
     const newProject: Project = {
-      id: Date.now().toString(),
+      id: generateId(),
       name
     };
     setProjects(prev => [...prev, newProject]);
@@ -175,22 +204,26 @@ const App: React.FC = () => {
   };
 
   const handleDeleteProject = (projectId: string) => {
-    if (window.confirm("Delete this project? Chats will be moved to Uncategorized.")) {
-      setProjects(prev => prev.filter(p => p.id !== projectId));
-      db.deleteProject(projectId);
-      
-      setSessions(prev => {
-          const next = prev.map(s => {
-              if (s.projectId === projectId) {
-                  const updated = { ...s, projectId: undefined };
-                  db.saveSession(updated); 
-                  return updated;
-              }
-              return s;
-          });
-          return next;
-      });
-    }
+    triggerConfirm(
+      "Delete Project",
+      "Are you sure you want to delete this project? Your chats will be saved and moved to Uncategorized.",
+      () => {
+        setProjects(prev => prev.filter(p => p.id !== projectId));
+        db.deleteProject(projectId);
+        
+        setSessions(prev => {
+            const next = prev.map(s => {
+                if (s.projectId === projectId) {
+                    const updated = { ...s, projectId: undefined };
+                    db.saveSession(updated); 
+                    return updated;
+                }
+                return s;
+            });
+            return next;
+        });
+      }
+    );
   };
 
   // --- Attachments & Audio ---
@@ -269,7 +302,7 @@ const App: React.FC = () => {
     let activeSessionId = currentSessionId;
     if (!activeSessionId) {
        const newSession: Session = {
-        id: Date.now().toString(),
+        id: generateId(),
         title: 'New Problem',
         timestamp: Date.now(),
         messages: []
@@ -281,7 +314,7 @@ const App: React.FC = () => {
     }
 
     const userMsg: Message = {
-      id: Date.now().toString(),
+      id: generateId(),
       role: 'user',
       text: attachments.length > 1 ? 'Here are my materials.' : 'Can you help me with this?',
       attachments: attachments
@@ -297,20 +330,20 @@ const App: React.FC = () => {
       });
 
       const modelMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: generateId(),
         role: 'model',
         text: responseText
       };
-      setMessages(prev => [...prev, userMsg, modelMsg]); 
+      setMessages(prev => [...prev, modelMsg]); 
     } catch (error) {
       console.error(error);
       const errorMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: generateId(),
         role: 'model',
         text: "I'm having trouble connecting to my brain right now. Please try again.",
         isError: true
       };
-      setMessages(prev => [...prev, userMsg, errorMsg]);
+      setMessages(prev => [...prev, errorMsg]);
     } finally {
       setIsLoading(false);
     }
@@ -327,7 +360,7 @@ const App: React.FC = () => {
     }
 
     const userMsg: Message = {
-      id: Date.now().toString(),
+      id: generateId(),
       role: 'user',
       text: textToSend,
       attachments: pendingAttachments.length > 0 ? [...pendingAttachments] : undefined
@@ -343,14 +376,14 @@ const App: React.FC = () => {
         attachments: pendingAttachments.length > 0 ? [...pendingAttachments] : undefined
       });
       const modelMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: generateId(),
         role: 'model',
         text: responseText
       };
       setMessages([...newMessages, modelMsg]);
     } catch (error) {
        const errorMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: generateId(),
         role: 'model',
         text: "Something went wrong. Please try asking again.",
         isError: true
@@ -376,7 +409,7 @@ const App: React.FC = () => {
     
     // Create a special system message object
     const systemMsg: Message = {
-      id: Date.now().toString(),
+      id: generateId(),
       role: 'user', // Role must be user for the API to accept it in history
       text: systemText,
       isSystemEvent: true // Flag to render it differently in UI
@@ -392,7 +425,7 @@ const App: React.FC = () => {
       });
       
       const modelMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: generateId(),
         role: 'model',
         text: responseText
       };
@@ -401,7 +434,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Merge failed", error);
       const errorMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: generateId(),
         role: 'model',
         text: "Failed to merge context.",
         isError: true
@@ -431,7 +464,7 @@ const App: React.FC = () => {
       if (!targetImage) throw new Error("Image attachment missing.");
 
       const userRequestMsg: Message = {
-        id: Date.now().toString(),
+        id: generateId(),
         role: 'user',
         text: "Generate the solution in my handwriting on the image."
       };
@@ -441,7 +474,7 @@ const App: React.FC = () => {
       const generatedImageUrl = `data:image/jpeg;base64,${generatedImageBase64}`;
 
       const modelResponseMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: generateId(),
         role: 'model',
         text: "I've written the solution on the image for you:",
         attachments: [{
@@ -456,7 +489,7 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Generation failed", error);
        const errorMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: generateId(),
         role: 'model',
         text: "I couldn't generate the handwriting solution on the image. Please try the text-based reveal instead.",
         isError: true
@@ -678,6 +711,32 @@ const App: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Custom Confirmation Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-xl animate-in zoom-in-95 duration-150 text-left">
+            <h3 className="text-lg font-bold text-white mb-2">{confirmModal.title}</h3>
+            <p className="text-slate-400 text-sm mb-6 leading-relaxed">{confirmModal.message}</p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl text-sm font-medium transition-colors"
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm font-medium transition-all shadow-md shadow-red-900/20"
+                type="button"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
