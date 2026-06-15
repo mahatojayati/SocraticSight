@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Upload, FileText, Image as ImageIcon, Loader2, Plus, X } from 'lucide-react';
 import { Attachment } from '../types';
+import { compressImage } from '../services/imageCompression';
 
 interface ImageUploaderProps {
   onFilesSelected: (attachments: Attachment[]) => void;
@@ -17,14 +18,24 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onFilesSelected, i
     let processedCount = 0;
     const totalFiles = files.length;
 
+    if (totalFiles === 0) return;
+
     Array.from(files).forEach(file => {
       // Support images and PDFs
       if (file.type.startsWith('image/') || file.type === 'application/pdf') {
         const reader = new FileReader();
-        reader.onloadend = () => {
+        reader.onloadend = async () => {
+          let base64Data = reader.result as string;
+          let mimeType = file.type;
+          
+          if (file.type.startsWith('image/')) {
+            base64Data = await compressImage(base64Data);
+            mimeType = 'image/jpeg'; // always compression-optimized jpeg
+          }
+
           newAttachments.push({
-            mimeType: file.type,
-            data: reader.result as string,
+            mimeType,
+            data: base64Data,
             name: file.name
           });
           processedCount++;
@@ -35,6 +46,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onFilesSelected, i
         reader.readAsDataURL(file);
       } else {
         processedCount++;
+        if (processedCount === totalFiles) {
+          setPreviews(prev => [...prev, ...newAttachments]);
+        }
       }
     });
   };

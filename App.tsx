@@ -6,6 +6,7 @@ import { Sidebar } from './components/Sidebar';
 import { LinkSessionModal } from './components/LinkSessionModal';
 import { sendMessageToGemini, generateSolvedImage } from './services/geminiService';
 import { db } from './services/db';
+import { compressImage } from './services/imageCompression';
 import { Message, Attachment, Session, Project } from './types';
 import { Send, EyeOff, Loader2, Sparkles, Paperclip, Link2, X, FileText, Mic, Square, Music } from 'lucide-react';
 
@@ -234,10 +235,18 @@ const App: React.FC = () => {
       files.forEach(file => {
         if (file.type.startsWith('image/') || file.type === 'application/pdf') {
           const reader = new FileReader();
-          reader.onloadend = () => {
+          reader.onloadend = async () => {
+            let base64Data = reader.result as string;
+            let mimeType = file.type;
+
+            if (file.type.startsWith('image/')) {
+              base64Data = await compressImage(base64Data);
+              mimeType = 'image/jpeg'; // always compression-optimized jpeg
+            }
+
             setPendingAttachments(prev => [...prev, {
-              mimeType: file.type,
-              data: reader.result as string,
+              mimeType,
+              data: base64Data,
               name: file.name
             }]);
           };
